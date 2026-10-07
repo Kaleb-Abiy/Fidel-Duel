@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fidel Duel</title>
+<meta name="theme-color" content="#12142a">
+<meta name="description" content="A two-player spoken word game in English and Amharic.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/favicon-64.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="fonts/fonts.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="tilet" aria-hidden="true"></div>
+
+<main class="wrap">
+  <header class="masthead">
+    <h1 class="logo">Fidel <span>Duel</span> <small class="am" lang="am">ፊደል</small></h1>
+    <p class="tagline">Two players. One topic. A random letter each turn. Say a word before the clock runs out.</p>
+    <div class="appbar">
+      <span class="chip ghost" id="netChip" hidden>Offline</span>
+      <span class="muted" id="cacheNote"></span>
+      <button type="button" class="btn ghost small" id="installBtn" hidden>Install app</button>
+    </div>
+  </header>
+
+  <!-- ============ SETUP ============ -->
+  <section id="setup" class="setup">
+    <div class="field-row players">
+      <label class="pfield p1" for="name1"><span class="dot"></span>
+        <input id="name1" maxlength="16" value="Player 1" aria-label="Player 1 name">
+      </label>
+      <span class="vs">vs</span>
+      <label class="pfield p2" for="name2"><span class="dot"></span>
+        <input id="name2" maxlength="16" value="Player 2" aria-label="Player 2 name">
+      </label>
+    </div>
+
+    <div class="block">
+      <h2 class="label">Language</h2>
+      <div class="seg" id="langSeg" role="radiogroup" aria-label="Language">
+        <button type="button" data-v="en" aria-pressed="true">English</button>
+        <button type="button" data-v="am" aria-pressed="false" class="am" lang="am">አማርኛ</button>
+      </div>
+    </div>
+
+    <div class="block">
+      <h2 class="label">Topic</h2>
+      <div class="topics" id="topics"></div>
+    </div>
+
+    <div class="block two">
+      <div>
+        <h2 class="label">Turn clock</h2>
+        <div class="seg" id="timeSeg" aria-label="Turn time">
+          <button type="button" data-v="20" aria-pressed="false">20s</button>
+          <button type="button" data-v="15" aria-pressed="true">15s</button>
+          <button type="button" data-v="10" aria-pressed="false">10s</button>
+        </div>
+        <p class="hint">Shrinks by 1s every round, down to 6s.</p>
+      </div>
+      <div>
+        <h2 class="label">Lives</h2>
+        <div class="seg" id="livesSeg" aria-label="Lives">
+          <button type="button" data-v="3" aria-pressed="true">3</button>
+          <button type="button" data-v="5" aria-pressed="false">5</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="block toggles">
+      <label class="toggle" for="optMic"><input type="checkbox" id="optMic" checked> Microphone</label>
+      <label class="toggle" for="optVoice"><input type="checkbox" id="optVoice" checked> Announcer voice <span class="muted">(English)</span></label>
+      <label class="toggle" for="optSound"><input type="checkbox" id="optSound" checked> Sound effects</label>
+    </div>
+
+    <div class="block voice">
+      <h2 class="label">Voice</h2>
+      <p class="voice-status" id="voiceStatus">Checking voice recognition…</p>
+      <div class="miccheck">
+        <button type="button" class="btn ghost" id="micTestBtn">Test microphone</button>
+        <button type="button" class="btn" id="voicePackBtn" hidden>Download offline voice</button>
+      </div>
+      <p id="micTestOut" class="muted">Say any word to check that speech is recognised in the chosen language.</p>
+    </div>
+
+    <ol class="howto">
+      <li>Pick a topic. Each turn, the wheel lands on a letter.</li>
+      <li>Say a word from the topic that starts with that letter. Your mic listens automatically.</li>
+      <li>Repeats and wrong letters don't count. Keep trying until the clock runs out.</li>
+      <li>Miss and you lose a life. Not in the word list? Your opponent can accept it.</li>
+    </ol>
+
+    <button type="button" class="btn start" id="startBtn">Start duel</button>
+  </section>
+
+  <!-- ============ GAME ============ -->
+  <section id="game" class="game" hidden>
+    <div class="board">
+      <div class="pcard p1" id="pc0">
+        <div class="pname"></div>
+        <div class="pscore">0</div>
+        <div class="plives"></div>
+        <div class="pstreak"></div>
+      </div>
+      <div class="pcard p2" id="pc1">
+        <div class="pname"></div>
+        <div class="pscore">0</div>
+        <div class="plives"></div>
+        <div class="pstreak"></div>
+      </div>
+    </div>
+
+    <div class="stage" id="stage">
+      <div class="stage-top">
+        <span id="topicLabel" class="chip"></span>
+        <span id="roundLabel" class="chip ghost"></span>
+      </div>
+
+      <div class="turnline" id="turnLine"></div>
+
+      <div class="ring-wrap">
+        <svg class="ring" viewBox="0 0 220 220" aria-hidden="true">
+          <circle class="ring-bg" cx="110" cy="110" r="100"></circle>
+          <circle class="ring-fg" id="ringFg" cx="110" cy="110" r="100"></circle>
+        </svg>
+        <div class="letter" id="letter">?</div>
+        <div class="secs" id="secs"></div>
+      </div>
+      <div class="family am" id="family" lang="am"></div>
+
+      <div class="listen" id="listen">
+        <span class="micdot" id="micDot"></span>
+        <span id="micState">Get ready…</span>
+      </div>
+      <div class="heard" id="heard" aria-live="polite"></div>
+      <div class="feedback" id="feedback" aria-live="assertive"></div>
+
+      <div class="judge" id="judge" hidden>
+        <p id="judgeText"></p>
+        <div class="judge-btns">
+          <button type="button" class="btn good" id="acceptBtn">Accept</button>
+          <button type="button" class="btn bad" id="rejectBtn">Reject</button>
+        </div>
+      </div>
+
+      <form class="typebox" id="typeForm" autocomplete="off">
+        <input id="typeInput" placeholder="Or type your word…" aria-label="Type your word">
+        <button type="submit" class="btn">Submit</button>
+      </form>
+
+      <div class="controls">
+        <button type="button" class="btn ghost" id="passBtn">Pass (lose a life)</button>
+        <button type="button" class="btn ghost" id="pauseBtn">Pause</button>
+      </div>
+    </div>
+
+    <div class="trail-wrap">
+      <h2 class="label">Words played</h2>
+      <ol class="trail" id="trail"></ol>
+    </div>
+  </section>
+</main>
+
+<!-- ============ OVERLAYS ============ -->
+<div class="overlay" id="pauseOv" hidden>
+  <div class="sheet">
+    <h2>Paused</h2>
+    <div class="sheet-btns">
+      <button type="button" class="btn start" id="resumeBtn">Resume</button>
+      <button type="button" class="btn ghost" id="quitBtn">Quit to setup</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overOv" hidden>
+  <canvas id="confetti" aria-hidden="true"></canvas>
+  <div class="sheet">
+    <p class="label" id="overReason"></p>
+    <h2 id="winnerText"></h2>
+    <div class="final" id="finalStats"></div>
+    <div class="sheet-btns">
+      <button type="button" class="btn start" id="rematchBtn">Rematch</button>
+      <button type="button" class="btn ghost" id="setupBtn">Change setup</button>
+    </div>
+  </div>
+</div>
+
+<script src="words.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
