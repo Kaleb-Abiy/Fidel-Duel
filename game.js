@@ -371,15 +371,17 @@
     if (isCustom) $('#edName').value = customTopic(id).name;
     renderEditor();
     $('#wordsOv').hidden = false;
+    nav.push('words');
     (focusName ? $('#edName') : $('#edInput')).focus();
   }
 
-  function closeEditor() {
+  function closeEditor(fromHistory = false) {
     if ($('#wordsOv').hidden) return;
     const ct = customTopic(ed.id);
     if (ct && !ct.name.trim()) { ct.name = 'My topic'; saveCustom(); }
     $('#wordsOv').hidden = true;
     renderTopics();
+    if (fromHistory !== true) nav.pop('words');
   }
 
   function renderEditor() {
@@ -467,6 +469,7 @@
       settings.topic = 'animals'; saveSettings();
       $('#wordsOv').hidden = true;
       renderTopics();
+      nav.pop('words');
     };
     $('#exportBtn').onclick = exportWords;
     $('#importFile').onchange = importWords;
@@ -577,14 +580,15 @@
       cur: 0, round: 1, letter: '', lastLetter: '', used: new Set(), usedFree: new Set(),
       phase: 'spin', timeLeft: 0, total: 0, timer: null, lastTick: 0, history: [],
     };
-    $('#setup').hidden = true;
-    $('#game').hidden = false;
+    showScreen('game');
+    nav.push('game');
+    $('#pauseOv').hidden = true;
     $('#overOv').hidden = true;
+    syncSoundBtn();
     $('#topicLabel').textContent = topicName();
     $('#topicLabel').className = 'chip' + (settings.lang === 'am' ? ' am' : '');
     $('#letter').classList.toggle('am', settings.lang === 'am');
     renderBoard(); renderTrail();
-    window.scrollTo({ top: 0 });
     // Prime audio + speech engine within the click gesture
     tone(1, 0.01, 'sine', 0.0001);
     startTurn();
@@ -816,28 +820,80 @@
 
   // ---------- pause ----------
   function pause() {
-    if (!S || S.phase !== 'turn') return;
+    if (!S || S.phase === 'over' || S.phase === 'paused' || $('#game').hidden) return;
+    S.resumeTo = S.phase;
+    if (S.phase === 'turn') { stopTimer(); stopRecognition(); }
+    else if (S.phase === 'spin' || S.phase === 'result') token++; // cancel the pending spin / next turn
+    try { speechSynthesis.cancel(); } catch {}
     S.phase = 'paused';
-    stopTimer(); stopRecognition();
+    const [a, b] = S.players;
+    $('#pauseInfo').textContent = `Round ${S.round} · ${a.name} ${a.score} – ${b.score} ${b.name}`;
     $('#pauseOv').hidden = false;
     $('#resumeBtn').focus();
   }
   function resume() {
     if (!S || S.phase !== 'paused') return;
     $('#pauseOv').hidden = true;
-    S.phase = 'turn';
-    runTimer();
-    startRecognition();
+    const to = S.resumeTo;
+    if (to === 'turn') { S.phase = 'turn'; runTimer(); startRecognition(); }
+    else if (to === 'judge') S.phase = 'judge';
+    else if (to === 'spin') startTurn(); // draw a fresh letter for the same player
+    else if (S.players[S.cur].lives <= 0) endGame('lives'); // paused right after a miss / hit
+    else nextTurn();
   }
-  function quitToSetup() {
+  function quitToSetup(fromHistory = false) {
     token++;
     if (S) { stopTimer(); stopRecognition(); S.phase = 'over'; }
     try { speechSynthesis.cancel(); } catch {}
     $('#pauseOv').hidden = true;
     $('#overOv').hidden = true;
-    $('#game').hidden = true;
-    $('#setup').hidden = false;
+    showScreen('setup');
     document.documentElement.style.setProperty('--pc', 'var(--p1)');
+    renderTopics();
+    if (!fromHistory) nav.pop('game');
+  }
+
+  // ---------- screens & back button ----------
+  // Starting a game or opening the word editor adds a history entry, so the phone's back
+  // button (or the browser's) steps back inside the app instead of leaving it.
+  const nav = {
+    ignoreNext: false,
+    push(screen) { if (!history.state || history.state.screen !== screen) history.pushState({ screen }, ''); },
+    pop(screen) { if (history.state && history.state.screen === screen) { nav.ignoreNext = true; history.back(); } },
+  };
+  addEventListener('popstate', () => {
+    if (nav.ignoreNext) { nav.ignoreNext = false; return; }
+    if (!$('#wordsOv').hidden) return closeEditor(true);
+    if ($('#game').hidden) return;
+    if (!S || S.phase === 'over' || S.phase === 'paused') return quitToSetup(true);
+    pause(); // first back press pauses; the next one leaves for the main menu
+    history.pushState({ screen: 'game' }, '');
+  });
+
+  function showScreen(name) {
+    $('#setup').hidden = name !== 'setup';
+    $('#game').hidden = name !== 'game';
+    document.body.classList.toggle('on-setup', name === 'setup');
+    document.body.classList.toggle('in-game', name === 'game');
+    window.scrollTo({ top: 0 });
+  }
+
+  // Mobile navigator: jump links for the long setup screen, highlighting the section in view.
+  function initNavigator() {
+    const links = [...document.querySelectorAll('#bottomNav a')];
+    links.forEach((a) => a.addEventListener('click', (e) => {
+      e.preventDefault();
+      const sec = document.getElementById(a.dataset.sec);
+      sec.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+    }));
+    $('#navStartBtn').onclick = startGame;
+    if (!('IntersectionObserver' in window)) return;
+    const io = new IntersectionObserver((entries) => {
+      for (const en of entries) {
+        if (en.isIntersecting) links.forEach((a) => a.classList.toggle('active', a.dataset.sec === en.target.id));
+      }
+    }, { rootMargin: '-35% 0px -60% 0px' });
+    links.forEach((a) => io.observe(document.getElementById(a.dataset.sec)));
   }
 
   // ---------- end ----------
@@ -958,14 +1014,20 @@
   $('#passBtn').onclick = () => { if (S && S.phase === 'turn') fail('pass'); };
   $('#pauseBtn').onclick = pause;
   $('#resumeBtn').onclick = resume;
-  $('#quitBtn').onclick = quitToSetup;
+  $('#quitBtn').onclick = () => quitToSetup();
+  $('#menuBtn').onclick = pause;
+  const syncSoundBtn = () => $('#soundBtn').setAttribute('aria-pressed', String(settings.sound));
+  $('#soundBtn').onclick = () => {
+    settings.sound = !settings.sound; saveSettings(); syncSoundBtn();
+    $('#optSound').checked = settings.sound;
+  };
   $('#acceptBtn').onclick = () => closeJudge(true);
   $('#rejectBtn').onclick = () => closeJudge(false);
   $('#rematchBtn').onclick = startGame;
-  $('#setupBtn').onclick = quitToSetup;
+  $('#setupBtn').onclick = () => quitToSetup();
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !$('#wordsOv').hidden) return closeEditor();
-    if (e.key === 'Escape') { if (S && S.phase === 'turn') pause(); else if (S && S.phase === 'paused') resume(); }
+    if (e.key === 'Escape' && !$('#game').hidden) { if (S && S.phase === 'paused') resume(); else pause(); }
   });
   document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
 
@@ -998,6 +1060,8 @@
   };
 
   initSetup();
+  initNavigator();
+  showScreen('setup');
   // exposed for quick console testing
   window.__fidel = { normalize, keyOf, letterOf, getDict };
 })();
