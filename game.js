@@ -46,20 +46,77 @@
   const showLetter = (L) => (isEth(L.codePointAt(0)) ? L : L.toUpperCase());
 
   // ================= dictionaries =================
-  function buildDict(raw) {
+  const splitList = (raw) => raw.split(/[,\n፣]+/).map((s) => s.trim().replace(/\s+/g, ' ')).filter(Boolean);
+
+  function buildDict(builtIn, mine) {
     const entries = [], byKey = new Map();
-    raw.split(',').map((s) => s.trim()).filter(Boolean).forEach((group) => {
+    const add = (group, isMine) => {
       const names = group.split('|').map((s) => s.trim()).filter(Boolean);
       const keys = names.map(keyOf).filter(Boolean);
       if (!keys.length || byKey.has(keys[0])) return; // skip duplicates
-      const entry = { id: entries.length, name: names[0], names, keys };
+      const entry = { id: entries.length, name: names[0], names, keys, mine: isMine };
       entries.push(entry);
       keys.forEach((k) => { if (!byKey.has(k)) byKey.set(k, entry); });
-    });
+    };
+    builtIn.forEach((g) => add(g, false));
+    mine.forEach((g) => add(g, true));
     return { entries, byKey };
   }
-  const DICTS = {};
-  for (const t of window.TOPICS) DICTS[t.id] = { en: buildDict(t.words.en), am: buildDict(t.words.am) };
+
+  // ---- the player's own words and topics, kept in this browser ----
+  // { extra: { [builtInTopicId]: { en: [...], am: [...] } }, topics: [{ id, name, words: { en: [...], am: [...] } }] }
+  const WORDS_KEY = 'fidel-duel-words';
+  let custom = { extra: {}, topics: [] };
+  try {
+    const c = JSON.parse(localStorage.getItem(WORDS_KEY) || 'null');
+    if (c && typeof c === 'object') custom = { extra: c.extra || {}, topics: Array.isArray(c.topics) ? c.topics : [] };
+  } catch {}
+  const saveCustom = () => { try { localStorage.setItem(WORDS_KEY, JSON.stringify(custom)); return true; } catch { return false; } };
+
+  const allTopics = () => [...window.TOPICS, ...custom.topics];
+  const customTopic = (id) => custom.topics.find((t) => t.id === id);
+  const tName = (t, lang) => (t.name != null ? t.name || 'Untitled topic' : t[lang]);
+
+  function userWords(id, lang) {
+    const ct = customTopic(id);
+    if (ct) return ct.words[lang] || [];
+    return (custom.extra[id] && custom.extra[id][lang]) || [];
+  }
+  function setUserWords(id, lang, list) {
+    const ct = customTopic(id);
+    if (ct) ct.words[lang] = list;
+    else (custom.extra[id] = custom.extra[id] || {})[lang] = list;
+    dictCache.delete(`${id}/${lang}`);
+    return saveCustom();
+  }
+
+  const dictCache = new Map();
+  function getDict(id, lang) {
+    const k = `${id}/${lang}`;
+    if (!dictCache.has(k)) {
+      const t = window.TOPICS.find((x) => x.id === id);
+      dictCache.set(k, buildDict(t ? splitList(t.words[lang]) : [], userWords(id, lang)));
+    }
+    return dictCache.get(k);
+  }
+
+  // Adds comma-separated words; skips ones the topic already has. Returns counts for the message.
+  function addWords(id, lang, raw) {
+    const d = getDict(id, lang);
+    const list = [...userWords(id, lang)];
+    const seen = new Set();
+    let added = 0, dup = 0;
+    for (const g of splitList(raw)) {
+      const keys = g.split('|').map(keyOf).filter(Boolean);
+      if (!keys.length) continue;
+      if (keys.some((k) => d.byKey.has(k) || seen.has(k))) { dup++; continue; }
+      keys.forEach((k) => seen.add(k));
+      list.push(g);
+      added++;
+    }
+    const saved = added ? setUserWords(id, lang, list) : true;
+    return { added, dup, saved };
+  }
 
   function lookup(dict, key) {
     if (dict.byKey.has(key)) return { entry: dict.byKey.get(key), key };
@@ -85,8 +142,9 @@
   let token = 0;      // bumps on every turn change so stale async callbacks bail out
   let dict = null;
 
-  const topicOf = (id) => window.TOPICS.find((t) => t.id === id);
-  const topicName = () => topicOf(settings.topic)[settings.lang];
+  const topicOf = (id) => allTopics().find((t) => t.id === id);
+  if (!topicOf(settings.topic)) settings.topic = 'animals';
+  const topicName = () => tName(topicOf(settings.topic), settings.lang);
   const turnSeconds = () => Math.max(6, settings.baseTime - (S.round - 1));
   const opp = () => S.players[1 - S.cur];
 
@@ -246,23 +304,213 @@
   }
 
   // ================= setup screen =================
+  const hasEth = (str) => /[ሀ-፿]/.test(str);
+
   function renderTopics() {
     const box = $('#topics');
     box.innerHTML = '';
-    for (const t of window.TOPICS) {
-      const d = DICTS[t.id][settings.lang];
-      const sample = d.entries.filter((_, i) => i % Math.ceil(d.entries.length / 4) === 3).slice(0, 3).map((e) => e.name);
+    for (const t of allTopics()) {
+      const d = getDict(t.id, settings.lang);
+      const mine = d.entries.filter((e) => e.mine).length;
+      const isCustom = t.name != null;
+      const name = tName(t, settings.lang);
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'topic';
       b.setAttribute('aria-pressed', String(t.id === settings.topic));
-      b.innerHTML = `<span class="tname ${settings.lang === 'am' ? 'am' : ''}"></span><span class="tmeta"></span>`;
-      b.querySelector('.tname').textContent = t[settings.lang];
-      b.querySelector('.tmeta').textContent = `${d.entries.length} words · ${sample.join(', ')}`;
+      b.innerHTML = '<span class="tname"></span><span class="tmeta"></span>';
+      b.querySelector('.tname').textContent = name;
+      b.querySelector('.tname').classList.toggle('am', hasEth(name));
+      let meta;
+      if (isCustom) meta = `Your topic · ${d.entries.length} ${d.entries.length === 1 ? 'word' : 'words'}`;
+      else {
+        const sample = d.entries.filter((_, i) => i % Math.ceil(d.entries.length / 4) === 3).slice(0, 3).map((e) => e.name);
+        meta = `${d.entries.length} words${mine ? ` (${mine} yours)` : ''} · ${sample.join(', ')}`;
+      }
+      b.querySelector('.tmeta').textContent = meta;
+      if (isCustom) b.classList.add('custom');
       b.onclick = () => { settings.topic = t.id; saveSettings(); renderTopics(); };
       box.appendChild(b);
     }
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'topic new';
+    add.innerHTML = '<span class="tname">+ New topic</span><span class="tmeta">Make your own category</span>';
+    add.onclick = newTopic;
+    box.appendChild(add);
+
+    const t = topicOf(settings.topic);
+    const mineHere = userWords(t.id, settings.lang).length;
+    $('#mineSummary').textContent = t.name != null
+      ? `“${tName(t, settings.lang)}” is your topic.`
+      : mineHere ? `You've added ${mineHere} ${mineHere === 1 ? 'word' : 'words'} to ${tName(t, settings.lang)}.`
+        : `Missing a word? Add your own to ${tName(t, settings.lang)}.`;
+    $('#startMsg').textContent = '';
   }
+
+  // ================= word editor =================
+  const ed = { id: null, lang: 'en', confirmDelete: false };
+
+  function newTopic() {
+    const id = `my-${Date.now().toString(36)}`;
+    custom.topics.push({ id, name: '', words: { en: [], am: [] } });
+    saveCustom();
+    settings.topic = id; saveSettings();
+    openEditor(id, true);
+  }
+
+  function openEditor(id = settings.topic, focusName = false) {
+    ed.id = id; ed.lang = settings.lang; ed.confirmDelete = false;
+    const isCustom = !!customTopic(id);
+    $('#edNameRow').hidden = !isCustom;
+    $('#edDelete').hidden = !isCustom;
+    $('#edDelete').textContent = 'Delete topic';
+    $('#edMsg').textContent = '';
+    $('#edMsg').className = 'ed-msg';
+    $('#edInput').value = '';
+    if (isCustom) $('#edName').value = customTopic(id).name;
+    renderEditor();
+    $('#wordsOv').hidden = false;
+    (focusName ? $('#edName') : $('#edInput')).focus();
+  }
+
+  function closeEditor() {
+    if ($('#wordsOv').hidden) return;
+    const ct = customTopic(ed.id);
+    if (ct && !ct.name.trim()) { ct.name = 'My topic'; saveCustom(); }
+    $('#wordsOv').hidden = true;
+    renderTopics();
+  }
+
+  function renderEditor() {
+    const t = topicOf(ed.id);
+    const d = getDict(ed.id, ed.lang);
+    const mine = userWords(ed.id, ed.lang);
+    const name = tName(t, ed.lang);
+    $('#edTitle').textContent = name;
+    $('#edTitle').classList.toggle('am', hasEth(name));
+    $('#edLangSeg').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === ed.lang)));
+    const langName = ed.lang === 'am' ? 'Amharic' : 'English';
+    const builtIn = d.entries.length - d.entries.filter((e) => e.mine).length;
+    $('#edCount').textContent = customTopic(ed.id)
+      ? `${mine.length} ${langName} ${mine.length === 1 ? 'word' : 'words'}.${mine.length < 3 ? ' Add at least 3 to play.' : ''}`
+      : `${builtIn} built-in ${langName} words, plus ${mine.length} of yours.`;
+    $('#edInput').placeholder = customTopic(ed.id) ? 'Type words to add' : ed.lang === 'am' ? 'ለምሳሌ: ሚዳቆ, ቆቅ' : 'e.g. Okapi, Mandrill';
+    $('#edInput').lang = ed.lang;
+    const ul = $('#edList');
+    ul.innerHTML = '';
+    if (!mine.length) {
+      const li = document.createElement('li');
+      li.className = 'empty';
+      li.textContent = `No ${langName} words of yours yet.`;
+      ul.appendChild(li);
+    }
+    [...mine].reverse().forEach((w) => {
+      const li = document.createElement('li');
+      li.innerHTML = '<span></span><button type="button" class="x">×</button>';
+      li.querySelector('span').textContent = w.replace(/\|/g, ' / ');
+      if (hasEth(w)) li.classList.add('am');
+      const x = li.querySelector('.x');
+      x.setAttribute('aria-label', `Remove ${w}`);
+      x.onclick = () => {
+        setUserWords(ed.id, ed.lang, userWords(ed.id, ed.lang).filter((v) => v !== w));
+        edMsg('', `Removed “${w.split('|')[0]}”.`);
+        renderEditor();
+      };
+      ul.appendChild(li);
+    });
+  }
+
+  function edMsg(kind, text) {
+    $('#edMsg').className = `ed-msg ${kind}`;
+    $('#edMsg').textContent = text;
+  }
+
+  function initEditor() {
+    $('#editWordsBtn').onclick = () => openEditor();
+    $('#edClose').onclick = closeEditor;
+    $('#wordsOv').addEventListener('click', (e) => { if (e.target.id === 'wordsOv') closeEditor(); });
+    $('#edLangSeg').addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      ed.lang = b.dataset.v; edMsg('', ''); renderEditor();
+    });
+    $('#edName').addEventListener('input', (e) => {
+      const ct = customTopic(ed.id);
+      if (!ct) return;
+      ct.name = e.target.value.slice(0, 28);
+      saveCustom();
+      $('#edTitle').textContent = tName(ct, ed.lang);
+    });
+    $('#edForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const raw = $('#edInput').value;
+      if (!raw.trim()) return;
+      const r = addWords(ed.id, ed.lang, raw);
+      if (!r.saved) return edMsg('bad', 'Couldn\'t save. This browser is blocking local storage (private window?).');
+      const parts = [];
+      if (r.added) parts.push(`Added ${r.added} ${r.added === 1 ? 'word' : 'words'}.`);
+      if (r.dup) parts.push(`${r.dup} ${r.dup === 1 ? 'was' : 'were'} already in the list.`);
+      edMsg(r.added ? 'good' : 'warn', parts.join(' ') || 'Nothing to add.');
+      if (r.added) $('#edInput').value = '';
+      renderEditor();
+    });
+    $('#edDelete').onclick = () => {
+      if (!ed.confirmDelete) {
+        ed.confirmDelete = true;
+        $('#edDelete').textContent = 'Tap again to delete';
+        return;
+      }
+      custom.topics = custom.topics.filter((t) => t.id !== ed.id);
+      dictCache.delete(`${ed.id}/en`); dictCache.delete(`${ed.id}/am`);
+      saveCustom();
+      settings.topic = 'animals'; saveSettings();
+      $('#wordsOv').hidden = true;
+      renderTopics();
+    };
+    $('#exportBtn').onclick = exportWords;
+    $('#importFile').onchange = importWords;
+  }
+
+  function exportWords() {
+    const blob = new Blob([JSON.stringify({ app: 'fidel-duel', version: 1, ...custom }, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'fidel-duel-my-words.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    edMsg('good', 'Saved a backup file of all your words.');
+  }
+
+  async function importWords(e) {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    let data;
+    try { data = JSON.parse(await file.text()); } catch { return edMsg('bad', 'That file isn\'t a Fidel Duel backup.'); }
+    if (!data || typeof data !== 'object' || (!data.extra && !data.topics)) return edMsg('bad', 'That file isn\'t a Fidel Duel backup.');
+    let words = 0, topics = 0;
+    const merge = (id, lang, list) => {
+      if (!Array.isArray(list) || !list.length) return;
+      words += addWords(id, lang, list.filter((w) => typeof w === 'string').join(',')).added;
+    };
+    for (const [id, langs] of Object.entries(data.extra || {})) {
+      if (!window.TOPICS.some((t) => t.id === id) || !langs) continue;
+      merge(id, 'en', langs.en); merge(id, 'am', langs.am);
+    }
+    for (const t of Array.isArray(data.topics) ? data.topics : []) {
+      if (!t || typeof t.id !== 'string') continue;
+      if (!customTopic(t.id)) {
+        custom.topics.push({ id: t.id, name: String(t.name || 'My topic').slice(0, 28), words: { en: [], am: [] } });
+        topics++;
+      }
+      merge(t.id, 'en', t.words && t.words.en); merge(t.id, 'am', t.words && t.words.am);
+    }
+    saveCustom();
+    edMsg('good', `Restored ${words} ${words === 1 ? 'word' : 'words'}${topics ? ` and ${topics} ${topics === 1 ? 'topic' : 'topics'}` : ''}.`);
+    renderEditor();
+  }
+
   function bindSeg(id, key, cast = (v) => v) {
     const seg = $(id);
     const sync = () => seg.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(cast(b.dataset.v) === settings[key])));
@@ -290,6 +538,7 @@
     $('#micTestBtn').onclick = micTest;
     $('#voicePackBtn').onclick = installVoicePack;
     $('#startBtn').onclick = startGame;
+    initEditor();
   }
 
   function micTest() {
@@ -314,9 +563,13 @@
 
   // ================= game flow =================
   function startGame() {
+    if (getDict(settings.topic, settings.lang).entries.length < 3) {
+      $('#startMsg').textContent = `“${topicName()}” needs at least 3 ${settings.lang === 'am' ? 'Amharic' : 'English'} words before you can play. Use Edit words to add some.`;
+      return;
+    }
     settings.names = [$('#name1').value.trim() || 'Player 1', $('#name2').value.trim() || 'Player 2'];
     saveSettings();
-    dict = DICTS[settings.topic][settings.lang];
+    dict = getDict(settings.topic, settings.lang);
     micBlockedMsg = SR ? '' : 'Voice recognition isn\'t available in this browser, so type your answers.';
     netFails = 0;
     S = {
@@ -478,6 +731,7 @@
       `“`, Object.assign(document.createElement('b'), { textContent: word }),
       `” isn't in the word list. ${o.name}, does it count for ${topicName()}?`,
     );
+    $('#rememberWord').checked = true;
     $('#judge').hidden = false;
     feedback('warn', 'Clock paused for the ruling.');
     setMicLabel('Waiting for a ruling');
@@ -488,6 +742,8 @@
     $('#judge').hidden = true;
     if (accepted) {
       S.usedFree.add(keyOf(S.pending));
+      // Saved for future games; this game keeps its own word list so nothing shifts mid-play.
+      if ($('#rememberWord').checked) addWords(settings.topic, settings.lang, S.pending.replace(/[,|]/g, ' '));
       succeed(S.pending, null, true);
     } else {
       S.phase = 'turn';
@@ -708,6 +964,7 @@
   $('#rematchBtn').onclick = startGame;
   $('#setupBtn').onclick = quitToSetup;
   document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !$('#wordsOv').hidden) return closeEditor();
     if (e.key === 'Escape') { if (S && S.phase === 'turn') pause(); else if (S && S.phase === 'paused') resume(); }
   });
   document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
@@ -742,5 +999,5 @@
 
   initSetup();
   // exposed for quick console testing
-  window.__fidel = { normalize, keyOf, letterOf, DICTS };
+  window.__fidel = { normalize, keyOf, letterOf, getDict };
 })();

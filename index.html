@@ -51,6 +51,10 @@
     <div class="block">
       <h2 class="label">Topic</h2>
       <div class="topics" id="topics"></div>
+      <div class="mine-row">
+        <span id="mineSummary" class="muted"></span>
+        <button type="button" class="btn ghost small" id="editWordsBtn">Edit words</button>
+      </div>
     </div>
 
     <div class="block two">
@@ -95,7 +99,10 @@
       <li>Miss and you lose a life. Not in the word list? Your opponent can accept it.</li>
     </ol>
 
-    <button type="button" class="btn start" id="startBtn">Start duel</button>
+    <div class="startrow">
+      <button type="button" class="btn start" id="startBtn">Start duel</button>
+      <p id="startMsg" class="start-msg" aria-live="polite"></p>
+    </div>
   </section>
 
   <!-- ============ GAME ============ -->
@@ -146,6 +153,7 @@
           <button type="button" class="btn good" id="acceptBtn">Accept</button>
           <button type="button" class="btn bad" id="rejectBtn">Reject</button>
         </div>
+        <label class="toggle remember" for="rememberWord"><input type="checkbox" id="rememberWord" checked> If accepted, add it to my words</label>
       </div>
 
       <form class="typebox" id="typeForm" autocomplete="off">
@@ -173,6 +181,46 @@
     <div class="sheet-btns">
       <button type="button" class="btn start" id="resumeBtn">Resume</button>
       <button type="button" class="btn ghost" id="quitBtn">Quit to setup</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="wordsOv" hidden>
+  <div class="sheet editor" role="dialog" aria-modal="true" aria-labelledby="edTitle">
+    <div class="ed-head">
+      <div>
+        <p class="label">Your words</p>
+        <h2 id="edTitle"></h2>
+      </div>
+      <button type="button" class="btn small" id="edClose">Done</button>
+    </div>
+
+    <div class="ed-name" id="edNameRow" hidden>
+      <label class="label" for="edName">Topic name</label>
+      <input id="edName" maxlength="28" placeholder="e.g. Football players">
+    </div>
+
+    <div class="seg" id="edLangSeg" aria-label="Word language">
+      <button type="button" data-v="en" aria-pressed="true">English</button>
+      <button type="button" data-v="am" aria-pressed="false" class="am" lang="am">አማርኛ</button>
+    </div>
+    <p class="muted" id="edCount"></p>
+
+    <form class="typebox" id="edForm" autocomplete="off">
+      <input id="edInput" aria-label="Words to add">
+      <button type="submit" class="btn">Add</button>
+    </form>
+    <p class="hint">Separate words with commas. Use | for another name of the same thing, like Hippo|Hippopotamus.</p>
+    <p class="ed-msg" id="edMsg" aria-live="polite"></p>
+
+    <ul class="mywords" id="edList"></ul>
+
+    <div class="ed-foot">
+      <span class="muted">Saved in this browser only.</span>
+      <button type="button" class="btn ghost small" id="exportBtn">Back up</button>
+      <label class="btn ghost small" for="importFile">Restore</label>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
+      <button type="button" class="btn ghost small danger" id="edDelete" hidden>Delete topic</button>
     </div>
   </div>
 </div>

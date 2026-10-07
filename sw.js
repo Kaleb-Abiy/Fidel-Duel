@@ -1,6 +1,6 @@
 // Offline cache for Fidel Duel.
 // Bump VERSION whenever you deploy changed files so players get the update.
-const VERSION = 'fidel-duel-v1';
+const VERSION = 'fidel-duel-v2';
 const ASSETS = [
   './', './index.html', './style.css', './game.js', './words.js', './manifest.webmanifest',
   './fonts/fonts.css',
