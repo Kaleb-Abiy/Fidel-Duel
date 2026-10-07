@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Fidel Duel</title>
 <meta name="theme-color" content="#12142a">
 <meta name="description" content="A two-player spoken word game in English and Amharic.">
@@ -30,74 +30,85 @@
 
   <!-- ============ SETUP ============ -->
   <section id="setup" class="setup">
-    <div class="field-row players nav-sec" id="secPlayers">
-      <label class="pfield p1" for="name1"><span class="dot"></span>
-        <input id="name1" maxlength="16" value="Player 1" aria-label="Player 1 name">
-      </label>
-      <span class="vs">vs</span>
-      <label class="pfield p2" for="name2"><span class="dot"></span>
-        <input id="name2" maxlength="16" value="Player 2" aria-label="Player 2 name">
-      </label>
-    </div>
-
-    <div class="block">
-      <h2 class="label">Language</h2>
-      <div class="seg" id="langSeg" role="radiogroup" aria-label="Language">
+    <div class="sec nav-sec" id="secPlayers">
+      <h2 class="label">Players</h2>
+      <div class="players">
+        <label class="pfield p1" for="name1"><span class="dot"></span>
+          <input id="name1" maxlength="16" value="Player 1" aria-label="Player 1 name" autocomplete="off">
+        </label>
+        <span class="vs">vs</span>
+        <label class="pfield p2" for="name2"><span class="dot"></span>
+          <input id="name2" maxlength="16" value="Player 2" aria-label="Player 2 name" autocomplete="off">
+        </label>
+      </div>
+      <div class="seg wide" id="langSeg" role="radiogroup" aria-label="Language">
         <button type="button" data-v="en" aria-pressed="true">English</button>
         <button type="button" data-v="am" aria-pressed="false" class="am" lang="am">አማርኛ</button>
       </div>
     </div>
 
-    <div class="block nav-sec" id="secTopic">
-      <h2 class="label">Topic</h2>
+    <div class="sec nav-sec" id="secTopic">
+      <div class="sec-head">
+        <h2 class="label">Topic</h2>
+        <button type="button" class="linkbtn" id="editWordsBtn">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>
+          Edit words
+        </button>
+      </div>
       <div class="topics" id="topics"></div>
-      <div class="mine-row">
-        <span id="mineSummary" class="muted"></span>
-        <button type="button" class="btn ghost small" id="editWordsBtn">Edit words</button>
-      </div>
+      <p id="mineSummary" class="muted note"></p>
     </div>
 
-    <div class="block two nav-sec" id="secOptions">
-      <div>
-        <h2 class="label">Turn clock</h2>
-        <div class="seg" id="timeSeg" aria-label="Turn time">
-          <button type="button" data-v="20" aria-pressed="false">20s</button>
-          <button type="button" data-v="15" aria-pressed="true">15s</button>
-          <button type="button" data-v="10" aria-pressed="false">10s</button>
+    <div class="sec nav-sec" id="secOptions">
+      <h2 class="label">Options</h2>
+      <div class="options">
+        <div class="opt-row">
+          <div class="opt-text"><span class="opt-name">Turn clock</span><span class="opt-sub">Shrinks 1s each round, down to 6s</span></div>
+          <div class="seg" id="timeSeg" aria-label="Turn time">
+            <button type="button" data-v="20" aria-pressed="false">20s</button>
+            <button type="button" data-v="15" aria-pressed="true">15s</button>
+            <button type="button" data-v="10" aria-pressed="false">10s</button>
+          </div>
         </div>
-        <p class="hint">Shrinks by 1s every round, down to 6s.</p>
-      </div>
-      <div>
-        <h2 class="label">Lives</h2>
-        <div class="seg" id="livesSeg" aria-label="Lives">
-          <button type="button" data-v="3" aria-pressed="true">3</button>
-          <button type="button" data-v="5" aria-pressed="false">5</button>
+        <div class="opt-row">
+          <div class="opt-text"><span class="opt-name">Lives</span><span class="opt-sub">Each miss costs one</span></div>
+          <div class="seg" id="livesSeg" aria-label="Lives">
+            <button type="button" data-v="3" aria-pressed="true">3</button>
+            <button type="button" data-v="5" aria-pressed="false">5</button>
+          </div>
+        </div>
+        <label class="opt-row" for="optMic">
+          <span class="opt-text"><span class="opt-name">Microphone</span><span class="opt-sub">Speak your answers. Off means typing.</span></span>
+          <input type="checkbox" class="switch" role="switch" id="optMic" checked>
+        </label>
+        <label class="opt-row" for="optVoice">
+          <span class="opt-text"><span class="opt-name">Announcer</span><span class="opt-sub">Reads out each letter (English)</span></span>
+          <input type="checkbox" class="switch" role="switch" id="optVoice" checked>
+        </label>
+        <label class="opt-row" for="optSound">
+          <span class="opt-text"><span class="opt-name">Sound effects</span><span class="opt-sub">Ticks, chimes and buzzers</span></span>
+          <input type="checkbox" class="switch" role="switch" id="optSound" checked>
+        </label>
+        <div class="opt-voice">
+          <p class="voice-status" id="voiceStatus">Checking voice recognition…</p>
+          <div class="miccheck">
+            <button type="button" class="btn ghost small" id="micTestBtn">Test microphone</button>
+            <button type="button" class="btn small" id="voicePackBtn" hidden>Download offline voice</button>
+          </div>
+          <p id="micTestOut" class="muted note">Say any word to check that speech is recognised in the chosen language.</p>
         </div>
       </div>
     </div>
 
-    <div class="block toggles">
-      <label class="toggle" for="optMic"><input type="checkbox" id="optMic" checked> Microphone</label>
-      <label class="toggle" for="optVoice"><input type="checkbox" id="optVoice" checked> Announcer voice <span class="muted">(English)</span></label>
-      <label class="toggle" for="optSound"><input type="checkbox" id="optSound" checked> Sound effects</label>
-    </div>
-
-    <div class="block voice">
-      <h2 class="label">Voice</h2>
-      <p class="voice-status" id="voiceStatus">Checking voice recognition…</p>
-      <div class="miccheck">
-        <button type="button" class="btn ghost" id="micTestBtn">Test microphone</button>
-        <button type="button" class="btn" id="voicePackBtn" hidden>Download offline voice</button>
-      </div>
-      <p id="micTestOut" class="muted">Say any word to check that speech is recognised in the chosen language.</p>
-    </div>
-
-    <ol class="howto nav-sec" id="secHelp">
-      <li>Pick a topic. Each turn, the wheel lands on a letter.</li>
-      <li>Say a word from the topic that starts with that letter. Your mic listens automatically.</li>
-      <li>Repeats and wrong letters don't count. Keep trying until the clock runs out.</li>
-      <li>Miss and you lose a life. Not in the word list? Your opponent can accept it.</li>
-    </ol>
+    <details class="sec howto-wrap nav-sec" id="secHelp">
+      <summary><h2 class="label">How to play</h2></summary>
+      <ol class="howto">
+        <li>Pick a topic. Each turn, the wheel lands on a letter.</li>
+        <li>Say a word from the topic that starts with that letter. Your mic listens automatically.</li>
+        <li>Repeats and wrong letters don't count. Keep trying until the clock runs out.</li>
+        <li>Miss and you lose a life. Not in the word list? Your opponent can accept it.</li>
+      </ol>
+    </details>
 
     <div class="startrow">
       <button type="button" class="btn start" id="startBtn">Start duel</button>
@@ -112,11 +123,15 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
         Menu
       </button>
-      <span class="gamebar-logo">Fidel <span>Duel</span></span>
+      <div class="gb-mid">
+        <span id="topicLabel" class="gb-topic"></span>
+        <span id="roundLabel" class="gb-round"></span>
+      </div>
       <button type="button" class="btn ghost small iconbtn" id="soundBtn" aria-pressed="true" aria-label="Sound effects">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path class="spk" d="M4 9h4l5-4v14l-5-4H4z"/><path class="on" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/><path class="off" d="M17 9l5 6M22 9l-5 6"/></svg>
       </button>
     </div>
+
     <div class="board">
       <div class="pcard p1" id="pc0">
         <div class="pname"></div>
@@ -132,14 +147,10 @@
       </div>
     </div>
 
+    <ol class="trail" id="trail" aria-label="Words played"></ol>
+
     <div class="stage" id="stage">
-      <div class="stage-top">
-        <span id="topicLabel" class="chip"></span>
-        <span id="roundLabel" class="chip ghost"></span>
-      </div>
-
       <div class="turnline" id="turnLine"></div>
-
       <div class="ring-wrap">
         <svg class="ring" viewBox="0 0 220 220" aria-hidden="true">
           <circle class="ring-bg" cx="110" cy="110" r="100"></circle>
@@ -149,37 +160,45 @@
         <div class="secs" id="secs"></div>
       </div>
       <div class="family am" id="family" lang="am"></div>
+      <div class="status">
+        <div class="heard" id="heard" aria-live="polite"></div>
+        <div class="feedback" id="feedback" aria-live="assertive"></div>
+      </div>
+    </div>
+
+    <div class="dock" id="dock">
+      <div class="judge" id="judge" hidden>
+        <p id="judgeText"></p>
+        <div class="judge-btns">
+          <button type="button" class="btn bad" id="rejectBtn">Reject</button>
+          <button type="button" class="btn good" id="acceptBtn">Accept</button>
+        </div>
+        <label class="remember" for="rememberWord"><input type="checkbox" id="rememberWord" checked> If accepted, add it to my words</label>
+      </div>
+
+      <form class="typebox" id="typeForm" autocomplete="off" hidden>
+        <input id="typeInput" placeholder="Type your word…" aria-label="Type your word" enterkeyhint="send" autocapitalize="off" autocorrect="off" spellcheck="false">
+        <button type="submit" class="btn">Submit</button>
+      </form>
 
       <div class="listen" id="listen">
         <span class="micdot" id="micDot"></span>
         <span id="micState">Get ready…</span>
       </div>
-      <div class="heard" id="heard" aria-live="polite"></div>
-      <div class="feedback" id="feedback" aria-live="assertive"></div>
 
-      <div class="judge" id="judge" hidden>
-        <p id="judgeText"></p>
-        <div class="judge-btns">
-          <button type="button" class="btn good" id="acceptBtn">Accept</button>
-          <button type="button" class="btn bad" id="rejectBtn">Reject</button>
-        </div>
-        <label class="toggle remember" for="rememberWord"><input type="checkbox" id="rememberWord" checked> If accepted, add it to my words</label>
+      <div class="actions">
+        <button type="button" class="act" id="passBtn">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6l7 6-7 6zM13 6l7 6-7 6z"/></svg>
+          <span>Pass</span>
+        </button>
+        <button type="button" class="micbtn" id="micBtn" aria-label="Listen again">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></svg>
+        </button>
+        <button type="button" class="act" id="typeBtn" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M9.5 10h.01M13 10h.01M16.5 10h.01M7.5 14h9"/></svg>
+          <span>Type</span>
+        </button>
       </div>
-
-      <form class="typebox" id="typeForm" autocomplete="off">
-        <input id="typeInput" placeholder="Or type your word…" aria-label="Type your word">
-        <button type="submit" class="btn">Submit</button>
-      </form>
-
-      <div class="controls">
-        <button type="button" class="btn ghost" id="passBtn">Pass (lose a life)</button>
-        <button type="button" class="btn ghost" id="pauseBtn">Pause</button>
-      </div>
-    </div>
-
-    <div class="trail-wrap">
-      <h2 class="label">Words played</h2>
-      <ol class="trail" id="trail"></ol>
     </div>
   </section>
 </main>
@@ -209,7 +228,7 @@
 
 <!-- ============ OVERLAYS ============ -->
 <div class="overlay" id="pauseOv" hidden>
-  <div class="sheet">
+  <div class="sheet" role="dialog" aria-modal="true" aria-label="Paused">
     <h2>Paused</h2>
     <p class="muted" id="pauseInfo"></p>
     <div class="sheet-btns">
@@ -251,18 +270,20 @@
     <ul class="mywords" id="edList"></ul>
 
     <div class="ed-foot">
-      <span class="muted">Saved in this browser only.</span>
-      <button type="button" class="btn ghost small" id="exportBtn">Back up</button>
-      <label class="btn ghost small" for="importFile">Restore</label>
-      <input type="file" id="importFile" accept=".json,application/json" hidden>
-      <button type="button" class="btn ghost small danger" id="edDelete" hidden>Delete topic</button>
+      <p class="muted note">Saved in this browser only. Back up to keep a copy.</p>
+      <div class="ed-foot-btns">
+        <button type="button" class="btn ghost small" id="exportBtn">Back up</button>
+        <label class="btn ghost small" for="importFile">Restore</label>
+        <input type="file" id="importFile" accept=".json,application/json" hidden>
+        <button type="button" class="btn ghost small danger" id="edDelete" hidden>Delete topic</button>
+      </div>
     </div>
   </div>
 </div>
 
 <div class="overlay" id="overOv" hidden>
   <canvas id="confetti" aria-hidden="true"></canvas>
-  <div class="sheet">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="winnerText">
     <p class="label" id="overReason"></p>
     <h2 id="winnerText"></h2>
     <div class="final" id="finalStats"></div>

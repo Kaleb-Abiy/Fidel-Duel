@@ -15,7 +15,7 @@ but the offline cache needs `http://localhost` or `https://`.)
 
 - The first visit saves the game for offline play (service worker in `sw.js`).
   Players can also use **Install app** to add it to their home screen or desktop.
-- **When you change any file, bump `VERSION` in `sw.js`** (e.g. `fidel-duel-v3` → `fidel-duel-v4`) so players get the update.
+- **When you change any file, bump `VERSION` in `sw.js`** (e.g. `fidel-duel-v4` → `fidel-duel-v5`) so players get the update.
   If you add new files, add them to the `ASSETS` list there too.
 - Voice offline: in Chrome, the English voice can be downloaded once from the setup screen and then runs
   on-device. Amharic voice currently only works online in Chrome; offline, players type their answers

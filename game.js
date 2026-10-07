@@ -300,6 +300,8 @@
     micBlockedMsg = msg;
     stopRecognition();
     feedback('warn', msg);
+    setMicLabel('Type your word');
+    syncInputMode();
     $('#typeInput').focus();
   }
 
@@ -321,13 +323,17 @@
       b.innerHTML = '<span class="tname"></span><span class="tmeta"></span>';
       b.querySelector('.tname').textContent = name;
       b.querySelector('.tname').classList.toggle('am', hasEth(name));
-      let meta;
+      let meta, sampleText = '';
       if (isCustom) meta = `Your topic · ${d.entries.length} ${d.entries.length === 1 ? 'word' : 'words'}`;
       else {
         const sample = d.entries.filter((_, i) => i % Math.ceil(d.entries.length / 4) === 3).slice(0, 3).map((e) => e.name);
-        meta = `${d.entries.length} words${mine ? ` (${mine} yours)` : ''} · ${sample.join(', ')}`;
+        meta = `${d.entries.length} words${mine ? ` · ${mine} yours` : ''}`;
+        sampleText = sample.join(', ');
       }
-      b.querySelector('.tmeta').textContent = meta;
+      b.querySelector('.tmeta').innerHTML = '<span class="tcount"></span><span class="tsample"></span>';
+      b.querySelector('.tcount').textContent = meta;
+      b.querySelector('.tsample').textContent = sampleText;
+      if (!sampleText) b.querySelector('.tsample').remove();
       if (isCustom) b.classList.add('custom');
       b.onclick = () => { settings.topic = t.id; saveSettings(); renderTopics(); };
       box.appendChild(b);
@@ -568,6 +574,8 @@
   function startGame() {
     if (getDict(settings.topic, settings.lang).entries.length < 3) {
       $('#startMsg').textContent = `“${topicName()}” needs at least 3 ${settings.lang === 'am' ? 'Amharic' : 'English'} words before you can play. Use Edit words to add some.`;
+      clearTimeout(startGame.msgTimer);
+      startGame.msgTimer = setTimeout(() => { $('#startMsg').textContent = ''; }, 6000);
       return;
     }
     settings.names = [$('#name1').value.trim() || 'Player 1', $('#name2').value.trim() || 'Player 2'];
@@ -586,7 +594,8 @@
     $('#overOv').hidden = true;
     syncSoundBtn();
     $('#topicLabel').textContent = topicName();
-    $('#topicLabel').className = 'chip' + (settings.lang === 'am' ? ' am' : '');
+    $('#topicLabel').className = 'gb-topic' + (hasEth(topicName()) ? ' am' : '');
+    S.typing = false;
     $('#letter').classList.toggle('am', settings.lang === 'am');
     renderBoard(); renderTrail();
     // Prime audio + speech engine within the click gesture
@@ -624,7 +633,9 @@
     $('#secs').textContent = '';
     $('.ring-wrap').classList.remove('danger');
     $('#judge').hidden = true;
+    $('#dock').classList.remove('judging');
     $('#typeInput').value = '';
+    syncInputMode();
     setRing(1);
     showHeard('');
     feedback('warn', micBlockedMsg || offlineNote());
@@ -658,10 +669,44 @@
     S.phase = 'turn';
     S.total = turnSeconds() * 1000;
     S.timeLeft = S.total;
-    setMicLabel(micUsable() ? 'Listening…' : 'Type your word below');
-    if (!micUsable()) $('#typeInput').focus();
+    setMicLabel(micUsable() ? 'Listening…' : 'Type your word');
+    syncInputMode();
+    if (!$('#typeForm').hidden) $('#typeInput').focus();
     runTimer();
     startRecognition();
+  }
+
+  function syncInputMode() {
+    const typing = !micUsable() || (S && S.typing);
+    $('#typeForm').hidden = !typing;
+    $('#typeBtn').setAttribute('aria-pressed', String(!!(S && S.typing)));
+    $('#micBtn').classList.toggle('off', !micUsable());
+    $('#micBtn').setAttribute('aria-label', micUsable() ? 'Listen again' : 'Turn on the microphone');
+  }
+
+  function micButton() {
+    if (!S || $('#game').hidden) return;
+    if (!SR) return feedback('warn', 'This browser can\'t recognise speech. Type your answer instead.');
+    if (micBlockedMsg) return feedback('warn', micBlockedMsg);
+    if (!navigator.onLine && !voice.local) return feedback('warn', offlineNote());
+    if (!settings.mic) {
+      settings.mic = true; saveSettings();
+      $('#optMic').checked = true;
+      S.typing = false;
+      syncInputMode();
+      feedback('', '');
+    }
+    if (S.phase === 'turn') {
+      setMicLabel('Listening…');
+      startRecognition();
+    }
+  }
+
+  function typeButton() {
+    if (!S) return;
+    S.typing = !S.typing || !micUsable();
+    syncInputMode();
+    if (S.typing) $('#typeInput').focus();
   }
 
   function runTimer() {
@@ -737,6 +782,7 @@
     );
     $('#rememberWord').checked = true;
     $('#judge').hidden = false;
+    $('#dock').classList.add('judging');
     feedback('warn', 'Clock paused for the ruling.');
     setMicLabel('Waiting for a ruling');
     $('#acceptBtn').focus();
@@ -744,6 +790,7 @@
   function closeJudge(accepted) {
     if (!S || S.phase !== 'judge') return;
     $('#judge').hidden = true;
+    $('#dock').classList.remove('judging');
     if (accepted) {
       S.usedFree.add(keyOf(S.pending));
       // Saved for future games; this game keeps its own word list so nothing shifts mid-play.
@@ -753,7 +800,7 @@
       S.phase = 'turn';
       sfx.nope();
       feedback('bad', `${opp().name} rejected it. Keep trying!`);
-      setMicLabel(micUsable() ? 'Listening…' : 'Type your word below');
+      setMicLabel(micUsable() ? 'Listening…' : 'Type your word');
       runTimer();
       startRecognition();
     }
@@ -773,7 +820,8 @@
     S.history.push({ p: S.cur, word, letter: S.letter, ok: true });
     sfx.good();
     flash('good');
-    const am = settings.lang === 'am' ? ' am' : '';
+    const am = hasEth(word) ? ' am' : '';
+    showHeard(''); // the word is shown big below; don't repeat it
     $('#feedback').className = 'feedback good';
     $('#feedback').innerHTML = `<span class="big${am}"></span>+${pts} points${bonus ? ` · streak ×${P.streak}` : ''}${judged ? ' · accepted by opponent' : ''}`;
     $('#feedback .big').textContent = word;
@@ -788,6 +836,8 @@
     S.phase = 'result';
     stopTimer(); stopRecognition();
     $('#judge').hidden = true;
+    $('#dock').classList.remove('judging');
+    showHeard('');
     const P = S.players[S.cur];
     P.lives--; P.streak = 0;
     S.history.push({ p: S.cur, word: '—', letter: S.letter, ok: false });
@@ -881,19 +931,35 @@
   // Mobile navigator: jump links for the long setup screen, highlighting the section in view.
   function initNavigator() {
     const links = [...document.querySelectorAll('#bottomNav a')];
-    links.forEach((a) => a.addEventListener('click', (e) => {
+    const secs = links.map((a) => document.getElementById(a.dataset.sec));
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // How to play starts open on wide screens, folded on phones.
+    if (matchMedia('(min-width: 721px)').matches) $('#secHelp').open = true;
+
+    let lockUntil = 0; // after a tap, keep that tab lit while the page scrolls to it
+    const setActive = (cur) => links.forEach((a, i) => a.classList.toggle('active', i === cur));
+    links.forEach((a, i) => a.addEventListener('click', (e) => {
       e.preventDefault();
-      const sec = document.getElementById(a.dataset.sec);
-      sec.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+      if (secs[i].tagName === 'DETAILS') secs[i].open = true;
+      setActive(i);
+      lockUntil = Date.now() + 1200;
+      secs[i].scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
     }));
     $('#navStartBtn').onclick = startGame;
-    if (!('IntersectionObserver' in window)) return;
-    const io = new IntersectionObserver((entries) => {
-      for (const en of entries) {
-        if (en.isIntersecting) links.forEach((a) => a.classList.toggle('active', a.dataset.sec === en.target.id));
-      }
-    }, { rootMargin: '-35% 0px -60% 0px' });
-    links.forEach((a) => io.observe(document.getElementById(a.dataset.sec)));
+
+    let ticking = false;
+    const spy = () => {
+      ticking = false;
+      if ($('#setup').hidden || Date.now() < lockUntil) return;
+      let cur = 0;
+      secs.forEach((sec, i) => { if (sec.getBoundingClientRect().top <= innerHeight * 0.25) cur = i; });
+      const atBottom = innerHeight + scrollY >= document.documentElement.scrollHeight - 8;
+      if (atBottom && secs[secs.length - 1].getBoundingClientRect().top < innerHeight * 0.6) cur = secs.length - 1;
+      setActive(cur);
+    };
+    addEventListener('scroll', () => { if (!ticking) { ticking = true; requestAnimationFrame(spy); } }, { passive: true });
+    $('#secHelp').addEventListener('toggle', spy);
+    spy();
   }
 
   // ---------- end ----------
@@ -918,7 +984,8 @@
       d.innerHTML = '<div class="fn"></div><div class="fs"></div><div class="fx"></div>';
       d.querySelector('.fn').textContent = p.name;
       d.querySelector('.fs').textContent = p.score;
-      d.querySelector('.fx').textContent = `${p.words} words · best streak ${p.bestStreak} · ${Math.max(0, p.lives)} lives left`;
+      const lives = Math.max(0, p.lives);
+      d.querySelector('.fx').textContent = `${p.words} ${p.words === 1 ? 'word' : 'words'} · best streak ${p.bestStreak} · ${lives} ${lives === 1 ? 'life' : 'lives'} left`;
       $('#finalStats').appendChild(d);
     });
     $('#overOv').hidden = false;
@@ -946,7 +1013,7 @@
     const ol = $('#trail');
     ol.innerHTML = '';
     if (!S.history.length) {
-      ol.innerHTML = '<li class="trail-empty" style="border:0;padding:0">Nothing yet. The first word is coming up.</li>';
+      ol.innerHTML = '<li class="trail-empty">Words played will show up here</li>';
       return;
     }
     [...S.history].reverse().forEach((h) => {
@@ -960,7 +1027,7 @@
     });
   }
   const setRing = (f) => { $('#ringFg').style.strokeDashoffset = String(628.32 * (1 - f)); };
-  const setMic = (on) => { $('#listen').classList.toggle('on', on); };
+  const setMic = (on) => { $('#listen').classList.toggle('on', on); $('#micBtn').classList.toggle('live', on); };
   const setMicLabel = (t) => { $('#micState').textContent = t; };
   function showHeard(t, interim = false) {
     const h = $('#heard');
@@ -1012,7 +1079,8 @@
     handleAnswer([v]);
   });
   $('#passBtn').onclick = () => { if (S && S.phase === 'turn') fail('pass'); };
-  $('#pauseBtn').onclick = pause;
+  $('#micBtn').onclick = micButton;
+  $('#typeBtn').onclick = typeButton;
   $('#resumeBtn').onclick = resume;
   $('#quitBtn').onclick = () => quitToSetup();
   $('#menuBtn').onclick = pause;
